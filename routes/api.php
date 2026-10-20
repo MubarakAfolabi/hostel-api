@@ -10,5 +10,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    Route::get('/hostels', fn() => HostelDetail::with('blocks.rooms.beds')->get());
+    Route::middleware('admin')->group(function () {
+        Route::get('/hostels', fn() => HostelDetail::with('blocks.rooms.beds')->get());
+    });
 });
