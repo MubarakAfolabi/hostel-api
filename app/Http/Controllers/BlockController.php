@@ -105,13 +105,16 @@ class BlockController extends Controller
         });
 
         return response()->json([
-            'block_id'     => $block->block_id,
-            'hostel_name'  => $block->hostel?->hostel_name,
-            'block_number' => $block->block_number,
-            'gender_type'  => $block->gender_type,
-            'total_floors' => $block->total_floors,
-            'total_rooms'  => $rooms->flatten()->count(),
-            'floors'       => $floors,
+            'block_id'         => $block->block_id,
+            'hostel_name'      => $block->hostel?->hostel_name,
+            'block_number'     => $block->block_number,
+            'gender_type'      => $block->gender_type,
+            'total_floors'     => $block->total_floors,
+            'total_rooms'      => $rooms->flatten()->count(),
+            'available_rooms'  => $floors->sum('available'),
+            'occupied_rooms'   => $floors->sum('occupied'),
+            'restricted_rooms' => $floors->sum('restricted'),
+            'floors'           => $floors,
         ]);
     }
 }
