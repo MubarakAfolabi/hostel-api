@@ -1,58 +1,197 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Hostel Ballot API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Backend API for the hostel ballot system. It manages hostels, blocks, rooms and beds, and lets admins and students log in with their admin ID or student ID.
 
-## About Laravel
+Built with **Laravel** and **MySQL**, using **Laravel Sanctum** for token authentication. The frontend is a separate **Next.js** project (`hostel-ballot`) that calls this API.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> **Status:** work in progress. Login, admin protection, room stats and the block overview are done. Bed allocation and the ballot itself are not built yet.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Requirements
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.2 or higher
+- Composer
+- MySQL or MariaDB (developed on XAMPP, MariaDB 10.4)
+- Laravel version: _fill in (run `php artisan --version`)_
 
-## Learning Laravel
+## Setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+1. Clone the project and install dependencies:
+    ```bash
+    composer install
+    ```
+2. Copy the environment file and generate the app key:
+    ```bash
+    cp .env.example .env
+    php artisan key:generate
+    ```
+3. Create an empty database named `hostel_ballot`, then import `database/hostel_ballot.sql` (phpMyAdmin → Import). This creates the tables **and** the `room_status_view` view.
+4. Open `.env` and set the database details. Check your MySQL port, because XAMPP sometimes uses `3307` instead of `3306`:
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+    ```
+    DB_CONNECTION=mysql
+    DB_HOST=127.0.0.1
+    DB_PORT=3306
+    DB_DATABASE=hostel_ballot
+    DB_USERNAME=root
+    DB_PASSWORD=
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+    SESSION_DRIVER=file
+    CACHE_STORE=file
+    QUEUE_CONNECTION=sync
+    ```
 
-## Agentic Development
+5. Create the Sanctum tokens table:
+    ```bash
+    php artisan migrate
+    ```
+6. Start the server:
+    ```bash
+    php artisan serve
+    ```
+    The API runs at `http://127.0.0.1:8000/api`.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Important: how the database works
+
+Most tables were **created by hand in MySQL, not by Laravel migrations**. The SQL file in `database/` is the source of truth for the structure.
+
+- **Never run `php artisan migrate:fresh` or `migrate:rollback`.** They drop tables, including the hand-made ones.
+- The default Laravel migrations for `users`, `cache` and `jobs` were deleted on purpose. The only migration left is `personal_access_tokens`.
+- In that migration, `tokenable_id` is a string (`varchar(10)`), not a number, because user IDs are strings like `U001`.
+- If you change the database structure, export it again (structure only) and replace `database/hostel_ballot.sql`.
+
+### Tables
+
+| Table              | Purpose                                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `users`            | Login accounts (`user_id`, `email`, `password_hash`, `role`)                             |
+| `admins`           | Admin profile, one per admin user (`admin_id`)                                           |
+| `students`         | Student profile, one per student user (`student_id`)                                     |
+| `hostel_details`   | Hostels                                                                                  |
+| `blocks`           | Blocks in a hostel. **Gender is stored here** (`gender_type`), because hostels are mixed |
+| `rooms`            | Rooms in a block. `room_type` is `S` (4 beds) or `L` (6 beds)                            |
+| `beds`             | Beds in a room. **Status lives here only**                                               |
+| `room_status_view` | View that works out each room's status from its beds                                     |
+
+All primary keys are `varchar(10)` strings that you supply yourself (for example `H001`, `B001`, `R001`). They are not auto-incremented. Admin IDs and student IDs must never overlap, because login looks up both.
+
+### Bed and room status
+
+A bed's `status` is one of `Available`, `Allocated`, `Restricted`, `Utility`. Rooms have no status column. A room's status is calculated in `room_status_view`:
+
+| Room status | Rule                                                          |
+| ----------- | ------------------------------------------------------------- |
+| Available   | At least one bed is `Available`                               |
+| Occupied    | No `Available` beds, at least one `Allocated`                 |
+| Restricted  | No `Available` or `Allocated` beds, at least one `Restricted` |
+| Utility     | All beds are `Utility`                                        |
+| No Beds     | The room has no beds yet                                      |
+
+To change these rules, edit the view (`CREATE OR REPLACE VIEW room_status_view ...`) and update `database/hostel_ballot.sql`. Nothing else needs to change.
+
+Ground floor is floor `1`. Floors run from `1` to `blocks.total_floors`.
+
+## Authentication
+
+- Users log in with their **admin ID or student ID** plus password, not email.
+- Login returns a Sanctum token. Send it on every protected request:
+    ```
+    Authorization: Bearer <token>
+    Accept: application/json
+    ```
+- Always send `Accept: application/json`, or Laravel may return an HTML page instead of a JSON error.
+- Roles are `admin` and `student`. The `admin` middleware (`app/Http/Middleware/AdminOnly.php`) returns `403` to anyone else.
+
+### Creating a user
+
+Passwords must be bcrypt hashes. Generate one:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+php artisan tinker
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+```php
+echo Illuminate\Support\Facades\Hash::make('password123');
+```
 
-## Contributing
+Copy the hash without any backslashes (tinker escapes `$` as `\$` when it prints a value without `echo`). Then insert the rows:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```sql
+INSERT INTO users (user_id, email, password_hash, role)
+VALUES ('U001', 'admin@example.com', 'PASTE_HASH_HERE', 'admin');
 
-## Code of Conduct
+INSERT INTO admins (admin_id, user_id, first_name, last_name)
+VALUES ('A001', 'U001', 'First', 'Last');
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+A valid hash starts with `$2y$` and is exactly 60 characters long. Check with:
 
-## Security Vulnerabilities
+```sql
+SELECT email, LENGTH(password_hash) AS len, LEFT(password_hash, 4) AS prefix FROM users;
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## API endpoints
 
-## License
+Base URL: `http://127.0.0.1:8000/api`
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Method | Endpoint                  | Access    | Description                                                           |
+| ------ | ------------------------- | --------- | --------------------------------------------------------------------- |
+| POST   | `/login`                  | Public    | Body: `id`, `password`. Returns `token` and `user`                    |
+| GET    | `/me`                     | Logged in | Current user with their admin or student profile                      |
+| POST   | `/logout`                 | Logged in | Deletes the current token                                             |
+| GET    | `/hostels`                | Admin     | Hostels with blocks, rooms and beds                                   |
+| GET    | `/stats/rooms`            | Admin     | Total, available, occupied and restricted room counts                 |
+| GET    | `/blocks`                 | Admin     | All blocks with a quick room summary                                  |
+| GET    | `/blocks/{number}`        | Admin     | One block: gender, floors, every room and its status                  |
+| GET    | `/blocks/{number}/floors` | Admin     | One row per floor: room counts by status, and small/large room counts |
+
+Blocks are looked up by **block number**. Block numbers are only unique within a hostel. If two hostels share a number, the API returns `409`, and you add `?hostel_id=H001` to pick one.
+
+## Code layout
+
+```
+app/
+  Http/Controllers/
+    AuthController.php       login, me, logout
+    BlockController.php      block list, detail, floors overview
+    DashboardController.php  room stats
+  Http/Middleware/
+    AdminOnly.php            blocks non-admin users
+  Models/
+    StringKeyModel.php       base class: string keys, no timestamps
+    User, Admin, Student, HostelDetail, Block, Room, Bed
+routes/api.php               all API routes
+database/hostel_ballot.sql   database structure (tables and view)
+```
+
+Because the tables use custom key names, every relationship in the models spells out its foreign key and local key. This is why they look different from most Laravel tutorials.
+
+## Testing the API
+
+Use Postman or Thunder Client.
+
+1. `POST /api/login` with `{"id": "A001", "password": "password123"}`.
+2. Copy the token and set it under Authorization → Bearer Token.
+3. Call any protected endpoint. A student token gets `403` on the admin routes.
+
+## Troubleshooting
+
+| Problem                                           | Likely cause                                                                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `This password does not use the Bcrypt algorithm` | `password_hash` is not a valid bcrypt hash. Re-generate it and check for stray `\` characters                                  |
+| `Table 'room_status_view' doesn't exist`          | The view was not created. Import `database/hostel_ballot.sql` or run the `CREATE VIEW` statement                               |
+| `401` instead of data                             | Missing or wrong Bearer token, or missing `Accept: application/json`                                                           |
+| `403 Forbidden`                                   | The logged-in user is not an admin                                                                                             |
+| Cannot connect to the database                    | MySQL is not running, or `DB_PORT` in `.env` does not match XAMPP's port. Run `php artisan config:clear` after changing `.env` |
+
+## Not built yet
+
+- Bed allocation and the ballot (nothing records which student holds which bed)
+- Student-facing endpoints
+- Creating and editing hostels, blocks, rooms, beds and users through the API (currently done directly in the database)
+
+## Deployment notes
+
+- Set the real database details in the server's `.env`. Never commit `.env`.
+- Set `APP_ENV=production` and `APP_DEBUG=false`.
+- In `config/cors.php`, allow only the real frontend URL, not `*`.
+- Check the server's PHP version against the Laravel version in `composer.json`.
