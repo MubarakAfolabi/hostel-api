@@ -117,4 +117,72 @@ class BlockController extends Controller
             'floors'           => $floors,
         ]);
     }
+
+    // Floor-by-floor summary of one block
+    public function floors(Request $request, $number)
+    {
+        $query = Block::where('block_number', $number);
+
+        if ($request->filled('hostel_id')) {
+            $query->where('hostel_id', $request->hostel_id);
+        }
+
+        $blocks = $query->get();
+
+        if ($blocks->isEmpty()) {
+            return response()->json(['message' => 'Block not found'], 404);
+        }
+
+        if ($blocks->count() > 1) {
+            return response()->json([
+                'message' => 'More than one block has this number. Add ?hostel_id=...',
+            ], 409);
+        }
+
+        $block = $blocks->first();
+
+        $rows = DB::table('room_status_view')
+            ->where('block_id', $block->block_id)
+            ->selectRaw("
+            floor_number,
+            COUNT(*) as total_rooms,
+            SUM(room_status = 'Available')  as available_rooms,
+            SUM(room_status = 'Occupied')   as occupied_rooms,
+            SUM(room_status = 'Restricted') as restricted_rooms,
+            SUM(room_type = 'S') as small_rooms,
+            SUM(room_type = 'L') as large_rooms
+        ")
+            ->groupBy('floor_number')
+            ->get()
+            ->keyBy('floor_number');
+
+        // Every floor from 1 to total_floors, even if it has no rooms yet
+        $floors = collect(range(1, $block->total_floors))->map(function ($n) use ($rows) {
+            $r = $rows->get($n);
+
+            return [
+                'floor_number'     => $n,
+                'total_rooms'      => (int) ($r->total_rooms ?? 0),
+                'available_rooms'  => (int) ($r->available_rooms ?? 0),
+                'occupied_rooms'   => (int) ($r->occupied_rooms ?? 0),
+                'restricted_rooms' => (int) ($r->restricted_rooms ?? 0),
+                'small_rooms'      => (int) ($r->small_rooms ?? 0),
+                'large_rooms'      => (int) ($r->large_rooms ?? 0),
+            ];
+        });
+
+        return response()->json([
+            'block_id'         => $block->block_id,
+            'block_number'     => $block->block_number,
+            'gender_type'      => $block->gender_type,
+            'total_floors'     => $block->total_floors,
+            'total_rooms'      => $floors->sum('total_rooms'),
+            'available_rooms'  => $floors->sum('available_rooms'),
+            'occupied_rooms'   => $floors->sum('occupied_rooms'),
+            'restricted_rooms' => $floors->sum('restricted_rooms'),
+            'small_rooms'      => $floors->sum('small_rooms'),
+            'large_rooms'      => $floors->sum('large_rooms'),
+            'floors'           => $floors,
+        ]);
+    }
 }

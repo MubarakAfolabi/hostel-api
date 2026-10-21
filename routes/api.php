@@ -16,6 +16,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/hostels', fn() => HostelDetail::with('blocks.rooms.beds')->get());
         Route::get('/stats/rooms', [DashboardController::class, 'roomStats']);
         Route::get('/blocks', [BlockController::class, 'index']);
-        Route::get('/blocks/{id}', [BlockController::class, 'show']);
+        Route::get('/blocks/{number}', [BlockController::class, 'show']);
+        Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
     });
 });
