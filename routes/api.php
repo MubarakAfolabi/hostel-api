@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\BlockController;
+use App\Http\Controllers\RoomController;
 use App\Models\HostelDetail;
 use Illuminate\Support\Facades\Route;
 
@@ -18,5 +19,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/blocks', [BlockController::class, 'index']);
         Route::get('/blocks/{number}', [BlockController::class, 'show']);
         Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
+        Route::get('/rooms', [RoomController::class, 'index']);
     });
 });

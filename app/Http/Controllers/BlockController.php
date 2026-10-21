@@ -16,7 +16,7 @@ class BlockController extends Controller
                 'block_id',
                 DB::raw('COUNT(*) as total_rooms'),
                 DB::raw("SUM(room_status = 'Available') as available"),
-                DB::raw("SUM(room_status = 'Occupied') as occupied"),
+                DB::raw("SUM(room_status = 'Allocated') as allocated"),
                 DB::raw("SUM(room_status = 'Restricted') as restricted")
             )
             ->groupBy('block_id')
@@ -37,7 +37,7 @@ class BlockController extends Controller
                     'total_floors' => $block->total_floors,
                     'total_rooms'  => (int) ($c->total_rooms ?? 0),
                     'available'    => (int) ($c->available ?? 0),
-                    'occupied'     => (int) ($c->occupied ?? 0),
+                    'allocated'    => (int) ($c->allocated ?? 0),
                     'restricted'   => (int) ($c->restricted ?? 0),
                 ];
             });
@@ -89,7 +89,7 @@ class BlockController extends Controller
                 'floor_number' => $n,
                 'total_rooms'  => $list->count(),
                 'available'    => $list->where('room_status', 'Available')->count(),
-                'occupied'     => $list->where('room_status', 'Occupied')->count(),
+                'allocated'    => $list->where('room_status', 'Allocated')->count(),
                 'restricted'   => $list->where('room_status', 'Restricted')->count(),
                 'rooms'        => $list->map(fn($r) => [
                     'room_id'         => $r->room_id,
@@ -112,7 +112,7 @@ class BlockController extends Controller
             'total_floors'     => $block->total_floors,
             'total_rooms'      => $rooms->flatten()->count(),
             'available_rooms'  => $floors->sum('available'),
-            'occupied_rooms'   => $floors->sum('occupied'),
+            'allocated_rooms'  => $floors->sum('allocated'),
             'restricted_rooms' => $floors->sum('restricted'),
             'floors'           => $floors,
         ]);
@@ -147,7 +147,7 @@ class BlockController extends Controller
             floor_number,
             COUNT(*) as total_rooms,
             SUM(room_status = 'Available')  as available_rooms,
-            SUM(room_status = 'Occupied')   as occupied_rooms,
+            SUM(room_status = 'Allocated') as allocated_rooms,
             SUM(room_status = 'Restricted') as restricted_rooms,
             SUM(room_type = 'S') as small_rooms,
             SUM(room_type = 'L') as large_rooms
@@ -164,7 +164,7 @@ class BlockController extends Controller
                 'floor_number'     => $n,
                 'total_rooms'      => (int) ($r->total_rooms ?? 0),
                 'available_rooms'  => (int) ($r->available_rooms ?? 0),
-                'occupied_rooms'   => (int) ($r->occupied_rooms ?? 0),
+                'allocated_rooms'  => (int) ($r->allocated_rooms ?? 0),
                 'restricted_rooms' => (int) ($r->restricted_rooms ?? 0),
                 'small_rooms'      => (int) ($r->small_rooms ?? 0),
                 'large_rooms'      => (int) ($r->large_rooms ?? 0),
@@ -178,7 +178,7 @@ class BlockController extends Controller
             'total_floors'     => $block->total_floors,
             'total_rooms'      => $floors->sum('total_rooms'),
             'available_rooms'  => $floors->sum('available_rooms'),
-            'occupied_rooms'   => $floors->sum('occupied_rooms'),
+            'allocated_rooms'  => $floors->sum('allocated_rooms'),
             'restricted_rooms' => $floors->sum('restricted_rooms'),
             'small_rooms'      => $floors->sum('small_rooms'),
             'large_rooms'      => $floors->sum('large_rooms'),
