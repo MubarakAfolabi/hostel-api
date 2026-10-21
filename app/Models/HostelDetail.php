@@ -6,7 +6,7 @@ class HostelDetail extends StringKeyModel
 {
     protected $table = 'hostel_details';
     protected $primaryKey = 'hostel_id';
-    protected $fillable = ['hostel_id', 'hostel_name', 'gender_type', 'warden_name'];
+    protected $fillable = ['hostel_id', 'hostel_name', 'warden_name'];
 
     public function blocks()
     {

@@ -15,4 +15,15 @@ class Room extends StringKeyModel
     {
         return $this->hasMany(Bed::class, 'room_id', 'room_id');
     }
+
+    public function scopeAvailable($query)
+    {
+        return $query->whereHas('beds', fn($q) => $q->where('status', 'Available'));
+    }
+
+    public function scopeFullyAllocated($query)
+    {
+        return $query->whereHas('beds', fn($q) => $q->where('status', 'Allocated'))
+            ->whereDoesntHave('beds', fn($q) => $q->where('status', 'Available'));
+    }
 }

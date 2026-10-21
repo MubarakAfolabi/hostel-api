@@ -5,7 +5,7 @@ namespace App\Models;
 class Block extends StringKeyModel
 {
     protected $primaryKey = 'block_id';
-    protected $fillable = ['block_id', 'hostel_id', 'block_number', 'total_floors'];
+    protected $fillable = ['block_id', 'hostel_id', 'gender_type', 'block_number', 'total_floors'];
 
     public function hostel()
     {
