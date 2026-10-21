@@ -4,7 +4,7 @@ Backend API for the hostel ballot system. It manages hostels, blocks, rooms and 
 
 Built with **Laravel** and **MySQL**, using **Laravel Sanctum** for token authentication. The frontend is a separate **Next.js** project (`hostel-ballot`) that calls this API.
 
-> **Status:** work in progress. Login, admin protection, room stats and the block overview are done. Bed allocation and the ballot itself are not built yet.
+> **Status:** work in progress. Login, admin protection, room stats, the block overview and the filterable room list are done. Bed allocation and the ballot itself are not built yet.
 
 ## Requirements
 
@@ -81,12 +81,12 @@ A bed's `status` is one of `Available`, `Allocated`, `Restricted`, `Utility`. Ro
 | Room status | Rule                                                          |
 | ----------- | ------------------------------------------------------------- |
 | Available   | At least one bed is `Available`                               |
-| Occupied    | No `Available` beds, at least one `Allocated`                 |
+| Allocated   | No `Available` beds, at least one `Allocated`                 |
 | Restricted  | No `Available` or `Allocated` beds, at least one `Restricted` |
 | Utility     | All beds are `Utility`                                        |
 | No Beds     | The room has no beds yet                                      |
 
-To change these rules, edit the view (`CREATE OR REPLACE VIEW room_status_view ...`) and update `database/hostel_ballot.sql`. Nothing else needs to change.
+To change these rules, edit the view (`CREATE OR REPLACE VIEW room_status_view ...`) and update `database/hostel_ballot.sql`. The controllers read the view, so they need no changes unless a status name changes.
 
 Ground floor is floor `1`. Floors run from `1` to `blocks.total_floors`.
 
@@ -133,18 +133,50 @@ SELECT email, LENGTH(password_hash) AS len, LEFT(password_hash, 4) AS prefix FRO
 
 Base URL: `http://127.0.0.1:8000/api`
 
-| Method | Endpoint                  | Access    | Description                                                           |
-| ------ | ------------------------- | --------- | --------------------------------------------------------------------- |
-| POST   | `/login`                  | Public    | Body: `id`, `password`. Returns `token` and `user`                    |
-| GET    | `/me`                     | Logged in | Current user with their admin or student profile                      |
-| POST   | `/logout`                 | Logged in | Deletes the current token                                             |
-| GET    | `/hostels`                | Admin     | Hostels with blocks, rooms and beds                                   |
-| GET    | `/stats/rooms`            | Admin     | Total, available, occupied and restricted room counts                 |
-| GET    | `/blocks`                 | Admin     | All blocks with a quick room summary                                  |
-| GET    | `/blocks/{number}`        | Admin     | One block: gender, floors, every room and its status                  |
-| GET    | `/blocks/{number}/floors` | Admin     | One row per floor: room counts by status, and small/large room counts |
+| Method | Endpoint                  | Access    | Description                                                                         |
+| ------ | ------------------------- | --------- | ----------------------------------------------------------------------------------- |
+| POST   | `/login`                  | Public    | Body: `id`, `password`. Returns `token` and `user`                                  |
+| GET    | `/me`                     | Logged in | Current user with their admin or student profile                                    |
+| POST   | `/logout`                 | Logged in | Deletes the current token                                                           |
+| GET    | `/hostels`                | Admin     | Hostels with blocks, rooms and beds                                                 |
+| GET    | `/stats/rooms`            | Admin     | Total, available, allocated and restricted room counts                              |
+| GET    | `/blocks`                 | Admin     | All blocks with a quick room summary (available, allocated, restricted)             |
+| GET    | `/blocks/{number}`        | Admin     | One block: gender, floors, every room and its status, plus block totals             |
+| GET    | `/blocks/{number}/floors` | Admin     | One row per floor: room counts by status, and small/large room counts               |
+| GET    | `/rooms`                  | Admin     | Filterable, paginated room list (see below)                                         |
 
 Blocks are looked up by **block number**. Block numbers are only unique within a hostel. If two hostels share a number, the API returns `409`, and you add `?hostel_id=H001` to pick one.
+
+### Room list filters
+
+`GET /rooms` accepts these optional query parameters. Filters combine with AND, and a filter that is left out (or set to `all`) is skipped.
+
+| Parameter   | Values                                                    | Description                                         |
+| ----------- | --------------------------------------------------------- | --------------------------------------------------- |
+| `block`     | A block number, or `all`                                  | Rooms in that block                                 |
+| `floor`     | A floor number, or `all`                                  | Rooms on that floor                                 |
+| `status`    | `available`, `allocated`, `restricted`, `utility`, `all`  | The room's overall status. Anything else gives `422` |
+| `search`    | Digits                                                    | Room numbers that start with this value             |
+| `hostel_id` | A hostel ID                                               | Only needed if two hostels share a block number     |
+| `per_page`  | 1 to 100 (default 20)                                     | Page size                                           |
+| `page`      | A page number                                             | Which page to return                                |
+
+Example: `GET /rooms?block=1&floor=2&status=available&search=2`
+
+Each room in `data` has `room_number`, `block_number`, `floor_number`, `gender_type`, `room_type`, `capacity`, `allocated_beds`, `available_beds` and `room_status`. Pagination info (`current_page`, `last_page`, `total`) comes with it. When going to another page, send the same filters again.
+
+## Frontend
+
+The Next.js app (`hostel-ballot`) is a separate project with its own `.env.local`:
+
+```
+API_URL=http://127.0.0.1:8000/api
+```
+
+- The login runs on the Next.js **server**. It calls `POST /login`, then stores the token in an **httpOnly cookie**. The token is never put in `localStorage` and browser JavaScript cannot read it.
+- Pages and server actions read the cookie and send it to this API as the Bearer token.
+- Client components cannot call this API directly. Use a Next.js server component or route handler to forward the request.
+- Start both projects: `php artisan serve` (port 8000) and `npm run dev` (port 3000).
 
 ## Code layout
 
@@ -154,6 +186,7 @@ app/
     AuthController.php       login, me, logout
     BlockController.php      block list, detail, floors overview
     DashboardController.php  room stats
+    RoomController.php       filterable room list
   Http/Middleware/
     AdminOnly.php            blocks non-admin users
   Models/
@@ -163,7 +196,7 @@ routes/api.php               all API routes
 database/hostel_ballot.sql   database structure (tables and view)
 ```
 
-Because the tables use custom key names, every relationship in the models spells out its foreign key and local key. This is why they look different from most Laravel tutorials.
+Because the tables use custom key names, every relationship in the models spells out its foreign key and local key. This is why they look different from most Laravel tutorials. The block, room and stats endpoints read `room_status_view` instead of the models, so the status rules live in one place.
 
 ## Testing the API
 
@@ -179,8 +212,10 @@ Use Postman or Thunder Client.
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `This password does not use the Bcrypt algorithm` | `password_hash` is not a valid bcrypt hash. Re-generate it and check for stray `\` characters                                  |
 | `Table 'room_status_view' doesn't exist`          | The view was not created. Import `database/hostel_ballot.sql` or run the `CREATE VIEW` statement                               |
+| Allocated counts are always 0                     | The view is out of date and still produces an old status name. Re-run the `CREATE OR REPLACE VIEW` from `database/hostel_ballot.sql` |
 | `401` instead of data                             | Missing or wrong Bearer token, or missing `Accept: application/json`                                                           |
 | `403 Forbidden`                                   | The logged-in user is not an admin                                                                                             |
+| `422 Invalid status` on `/rooms`                  | `status` is not one of the allowed values listed above                                                                         |
 | Cannot connect to the database                    | MySQL is not running, or `DB_PORT` in `.env` does not match XAMPP's port. Run `php artisan config:clear` after changing `.env` |
 
 ## Not built yet
@@ -188,6 +223,7 @@ Use Postman or Thunder Client.
 - Bed allocation and the ballot (nothing records which student holds which bed)
 - Student-facing endpoints
 - Creating and editing hostels, blocks, rooms, beds and users through the API (currently done directly in the database)
+- Login rate limiting, token expiry and change-password
 
 ## Deployment notes
 
