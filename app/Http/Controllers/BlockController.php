@@ -99,7 +99,6 @@ class BlockController extends Controller
                     'room_status'     => $r->room_status,
                     'available_beds'  => (int) $r->available_beds,
                     'allocated_beds'  => (int) $r->allocated_beds,
-                    'restricted_beds' => (int) $r->restricted_beds,
                 ])->values(),
             ];
         });

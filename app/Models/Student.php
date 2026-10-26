@@ -11,4 +11,8 @@ class Student extends StringKeyModel
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
+    public function bed()
+    {
+        return $this->hasOne(Bed::class, 'student_id', 'student_id');
+    }
 }

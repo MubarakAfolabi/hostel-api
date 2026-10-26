@@ -5,7 +5,7 @@ namespace App\Models;
 class Room extends StringKeyModel
 {
     protected $primaryKey = 'room_id';
-    protected $fillable = ['room_id', 'block_id', 'room_number', 'floor_number', 'capacity', 'room_type'];
+    protected $fillable = ['room_id', 'block_id', 'room_number', 'floor_number', 'capacity', 'room_type', 'status'];
 
     public function block()
     {
