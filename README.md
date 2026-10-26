@@ -4,7 +4,7 @@ Backend API for the hostel ballot system. It manages hostels, blocks, rooms and 
 
 Built with **Laravel** and **MySQL**, using **Laravel Sanctum** for token authentication. The frontend is a separate **Next.js** project (`hostel-ballot`) that calls this API.
 
-> **Status:** work in progress. Login, admin protection, room stats, the block overview and the filterable room list are done. Bed allocation and the ballot itself are not built yet.
+> **Status:** work in progress. Login, admin protection, room stats, the block overview, the filterable room list and the hostel data are done. Bed allocation and the ballot itself are not built yet.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ Built with **Laravel** and **MySQL**, using **Laravel Sanctum** for token authen
     cp .env.example .env
     php artisan key:generate
     ```
-3. Create an empty database named `hostel_ballot`, then import `database/hostel_ballot.sql` (phpMyAdmin → Import). This creates the tables **and** the `room_status_view` view.
+3. Create an empty database named `hostel_ballot`, then import `database/hostel_ballot.sql` (phpMyAdmin → Import). This creates the tables, the `room_status_view` view, and the triggers and stored procedure that keep room status up to date. Then load the hostel data (see "Loading the hostel data" below).
 4. Open `.env` and set the database details. Check your MySQL port, because XAMPP sometimes uses `3307` instead of `3306`:
 
     ```
@@ -68,27 +68,54 @@ Most tables were **created by hand in MySQL, not by Laravel migrations**. The SQ
 | `students`         | Student profile, one per student user (`student_id`)                                     |
 | `hostel_details`   | Hostels                                                                                  |
 | `blocks`           | Blocks in a hostel. **Gender is stored here** (`gender_type`), because hostels are mixed |
-| `rooms`            | Rooms in a block. `room_type` is `S` (4 beds) or `L` (6 beds)                            |
-| `beds`             | Beds in a room. **Status lives here only**                                               |
-| `room_status_view` | View that works out each room's status from its beds                                     |
+| `rooms`            | Rooms in a block. **Status lives here.** `room_type` is `S` (4 beds), `L` (6 beds) or `Other` |
+| `beds`             | Beds in S and L rooms. Status is `Available` or `Allocated`, and `student_id` says who holds it |
+| `room_status_view` | View used by the API: each room with its status and its available and allocated bed counts |
 
 All primary keys are `varchar(10)` strings that you supply yourself (for example `H001`, `B001`, `R001`). They are not auto-incremented. Admin IDs and student IDs must never overlap, because login looks up both.
 
-### Bed and room status
+### Room and bed status
 
-A bed's `status` is one of `Available`, `Allocated`, `Restricted`, `Utility`. Rooms have no status column. A room's status is calculated in `room_status_view`:
+**Rooms** hold the room status, in `rooms.status`:
 
-| Room status | Rule                                                          |
-| ----------- | ------------------------------------------------------------- |
-| Available   | At least one bed is `Available`                               |
-| Allocated   | No `Available` beds, at least one `Allocated`                 |
-| Restricted  | No `Available` or `Allocated` beds, at least one `Restricted` |
-| Utility     | All beds are `Utility`                                        |
-| No Beds     | The room has no beds yet                                      |
+| Room status | Meaning                                                               |
+| ----------- | --------------------------------------------------------------------- |
+| Available   | An S or L room with at least one free bed                             |
+| Allocated   | An S or L room where every bed is taken (the room is full)            |
+| Utility     | Common rooms. They have no beds                                       |
+| Restricted  | Store, offices and other non-bedrooms. They have no beds              |
 
-To change these rules, edit the view (`CREATE OR REPLACE VIEW room_status_view ...`) and update `database/hostel_ballot.sql`. The controllers read the view, so they need no changes unless a status name changes.
+**Beds** only hold `Available` or `Allocated`, plus `student_id`:
+
+- A bed is `Allocated` exactly when it has a student, and `Available` when `student_id` is empty. The database rejects any bed that has only one of the two.
+- A student can hold only one bed.
+- `Utility` and `Restricted` rooms (`room_type` = `Other`) have capacity 0 and no beds.
+
+**Triggers keep the room status correct.** Whenever a bed is added, changed or removed, the stored procedure `refresh_room_status` recalculates the status of that room. This happens inside the database, so it also works when someone edits a bed in phpMyAdmin. The triggers only touch rooms whose status is `Available` or `Allocated`, so `Utility` and `Restricted` rooms keep the status you set.
+
+To allocate or free a bed, update **only the bed**:
+
+```sql
+UPDATE beds SET student_id = 'S001', status = 'Allocated' WHERE bed_id = 'R0007-1';
+UPDATE beds SET student_id = NULL, status = 'Available' WHERE bed_id = 'R0007-1';
+```
+
+**Limit to remember:** MySQL does not allow a statement to read the `rooms` table while a trigger it fires is updating it. An update to `beds` that also reads `rooms` (for example `WHERE room_id IN (SELECT room_id FROM rooms ...)`) fails with error 1442. Update beds by their own ID, which is what Eloquent does by default.
 
 Ground floor is floor `1`. Floors run from `1` to `blocks.total_floors`.
+
+## Loading the hostel data
+
+The hostel, blocks, rooms and beds come from the 2026 hostel profile spreadsheet. Two scripts in `database/` load them:
+
+1. `schema_update.sql` adds `rooms.status`, `beds.student_id`, the new view and the triggers. **Run it once** on a database that does not have them yet. (If you imported the current `hostel_ballot.sql`, the schema is already up to date and you can skip this.)
+2. `seed_hostel.sql` loads the data:
+   - 1 hostel (`H001`), 11 blocks (`B001` to `B011`; block 9 is Wing A, block 10 is Wing B, block 11 is OPH)
+   - 584 rooms and 2,680 beds, all beds `Available`
+   - Blocks 1, 4, 5, 9, 10 and 11 are female, blocks 2, 3, 6, 7 and 8 are male
+   - Room IDs are `R0001` to `R0584`, and bed IDs look like `R0007-1`
+
+**Do not re-run `seed_hostel.sql` once students have beds.** It deletes every bed under `H001`, so real allocations would be lost. Room numbers are stored as numbers, so `001` is stored as `1`.
 
 ## Authentication
 
@@ -155,7 +182,7 @@ Blocks are looked up by **block number**. Block numbers are only unique within a
 | ----------- | --------------------------------------------------------- | --------------------------------------------------- |
 | `block`     | A block number, or `all`                                  | Rooms in that block                                 |
 | `floor`     | A floor number, or `all`                                  | Rooms on that floor                                 |
-| `status`    | `available`, `allocated`, `restricted`, `utility`, `all`  | The room's overall status. Anything else gives `422` |
+| `status`    | `available`, `allocated`, `restricted`, `utility`, `all`  | The room's status (from `rooms.status`). Anything else gives `422` |
 | `search`    | Digits                                                    | Room numbers that start with this value             |
 | `hostel_id` | A hostel ID                                               | Only needed if two hostels share a block number     |
 | `per_page`  | 1 to 100 (default 20)                                     | Page size                                           |
@@ -196,7 +223,7 @@ routes/api.php               all API routes
 database/hostel_ballot.sql   database structure (tables and view)
 ```
 
-Because the tables use custom key names, every relationship in the models spells out its foreign key and local key. This is why they look different from most Laravel tutorials. The block, room and stats endpoints read `room_status_view` instead of the models, so the status rules live in one place.
+Because the tables use custom key names, every relationship in the models spells out its foreign key and local key. This is why they look different from most Laravel tutorials. The block, room and stats endpoints read `room_status_view`, which reads `rooms.status`. The triggers in the database keep that status correct.
 
 ## Testing the API
 
@@ -212,7 +239,10 @@ Use Postman or Thunder Client.
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `This password does not use the Bcrypt algorithm` | `password_hash` is not a valid bcrypt hash. Re-generate it and check for stray `\` characters                                  |
 | `Table 'room_status_view' doesn't exist`          | The view was not created. Import `database/hostel_ballot.sql` or run the `CREATE VIEW` statement                               |
-| Allocated counts are always 0                     | The view is out of date and still produces an old status name. Re-run the `CREATE OR REPLACE VIEW` from `database/hostel_ballot.sql` |
+| Allocated counts are always 0                     | No beds are allocated yet, or the view is out of date. Re-run the `CREATE OR REPLACE VIEW` from `database/hostel_ballot.sql` |
+| `#1558 Column count of mysql.proc is wrong`       | The MariaDB system tables are from an older version. Run `mysql_upgrade` (for XAMPP on Linux: `sudo /opt/lampp/bin/mysql_upgrade -u root`), restart MySQL and retry |
+| `1442 Can't update table 'rooms' in stored function/trigger` | A statement on `beds` also reads `rooms`. Update beds by their own ID, or read the room IDs first |
+| A room's status looks wrong                       | The triggers are missing. Run `SHOW TRIGGERS;`. There should be `beds_after_insert`, `beds_after_update` and `beds_after_delete` |
 | `401` instead of data                             | Missing or wrong Bearer token, or missing `Accept: application/json`                                                           |
 | `403 Forbidden`                                   | The logged-in user is not an admin                                                                                             |
 | `422 Invalid status` on `/rooms`                  | `status` is not one of the allowed values listed above                                                                         |
@@ -220,7 +250,7 @@ Use Postman or Thunder Client.
 
 ## Not built yet
 
-- Bed allocation and the ballot (nothing records which student holds which bed)
+- The ballot and the allocation endpoints. The database can already record which student holds which bed (`beds.student_id`), but nothing in the API assigns beds yet
 - Student-facing endpoints
 - Creating and editing hostels, blocks, rooms, beds and users through the API (currently done directly in the database)
 - Login rate limiting, token expiry and change-password
