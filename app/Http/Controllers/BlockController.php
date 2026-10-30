@@ -148,6 +148,7 @@ class BlockController extends Controller
             SUM(room_status = 'Available')  as available_rooms,
             SUM(room_status = 'Allocated') as allocated_rooms,
             SUM(room_status = 'Restricted') as restricted_rooms,
+            SUM(room_status = 'Utility') as utility_rooms,
             SUM(room_type = 'S') as small_rooms,
             SUM(room_type = 'L') as large_rooms
         ")
@@ -165,6 +166,7 @@ class BlockController extends Controller
                 'available_rooms'  => (int) ($r->available_rooms ?? 0),
                 'allocated_rooms'  => (int) ($r->allocated_rooms ?? 0),
                 'restricted_rooms' => (int) ($r->restricted_rooms ?? 0),
+                'utility_rooms'    => (int) ($r->utility_rooms ?? 0),
                 'small_rooms'      => (int) ($r->small_rooms ?? 0),
                 'large_rooms'      => (int) ($r->large_rooms ?? 0),
             ];
@@ -179,6 +181,7 @@ class BlockController extends Controller
             'available_rooms'  => $floors->sum('available_rooms'),
             'allocated_rooms'  => $floors->sum('allocated_rooms'),
             'restricted_rooms' => $floors->sum('restricted_rooms'),
+            'utility_rooms'    => $floors->sum('utility_rooms'),
             'small_rooms'      => $floors->sum('small_rooms'),
             'large_rooms'      => $floors->sum('large_rooms'),
             'floors'           => $floors,

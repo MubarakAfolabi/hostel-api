@@ -13,7 +13,8 @@ class DashboardController extends Controller
                 COUNT(*) as total_rooms,
                 COALESCE(SUM(room_status = 'Available'), 0)  as available_rooms,
                 COALESCE(SUM(room_status = 'Allocated'), 0)  as allocated_rooms,
-                COALESCE(SUM(room_status = 'Restricted'), 0) as restricted_rooms
+                COALESCE(SUM(room_status = 'Restricted'), 0) as restricted_rooms,
+                COALESCE(SUM(room_status = 'Utility'), 0)    as utility_rooms
             ")
             ->first();
 
@@ -22,6 +23,7 @@ class DashboardController extends Controller
             'available_rooms'  => (int) $s->available_rooms,
             'allocated_rooms'  => (int) $s->allocated_rooms,
             'restricted_rooms' => (int) $s->restricted_rooms,
+            'utility_rooms'    => (int) $s->utility_rooms,
         ]);
     }
 }
