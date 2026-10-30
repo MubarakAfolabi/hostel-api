@@ -16,10 +16,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::get('/hostels', fn() => HostelDetail::with('blocks.rooms.beds')->get());
         Route::get('/stats/rooms', [DashboardController::class, 'roomStats']);
-        Route::get('/blocks', [BlockController::class, 'index']);
-        Route::get('/blocks/{number}', [BlockController::class, 'show']);
-        Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
         Route::get('/rooms', [RoomController::class, 'index']);
+        Route::get('/blocks', [BlockController::class, 'index']);
         Route::get('/blocks/numbers', [BlockController::class, 'numbers']);
+        Route::get('/blocks/{number}', [BlockController::class, 'show'])->whereNumber('number');
+        Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
     });
 });
