@@ -184,4 +184,10 @@ class BlockController extends Controller
             'floors'           => $floors,
         ]);
     }
+
+    // Just the block numbers, for navigation buttons
+    public function numbers()
+    {
+        return Block::orderBy('block_number')->get(['block_number', 'gender_type']);
+    }
 }
