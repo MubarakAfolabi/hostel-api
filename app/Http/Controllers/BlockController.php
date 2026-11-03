@@ -143,15 +143,18 @@ class BlockController extends Controller
         $rows = DB::table('room_status_view')
             ->where('block_id', $block->block_id)
             ->selectRaw("
-            floor_number,
-            COUNT(*) as total_rooms,
-            SUM(room_status = 'Available')  as available_rooms,
-            SUM(room_status = 'Allocated') as allocated_rooms,
-            SUM(room_status = 'Restricted') as restricted_rooms,
-            SUM(room_status = 'Utility') as utility_rooms,
-            SUM(room_type = 'S') as small_rooms,
-            SUM(room_type = 'L') as large_rooms
-        ")
+                floor_number,
+                COUNT(*) as total_rooms,
+                SUM(room_status = 'Available')  as available_rooms,
+                SUM(room_status = 'Allocated')  as allocated_rooms,
+                SUM(room_status = 'Restricted') as restricted_rooms,
+                SUM(room_status = 'Utility')    as utility_rooms,
+                SUM(room_type = 'S') as small_rooms,
+                SUM(room_type = 'L') as large_rooms,
+                SUM(available_beds + allocated_beds) as total_bedspaces,
+                SUM(allocated_beds) as allocated_bedspaces,
+                SUM(available_beds) as available_bedspaces
+            ")
             ->groupBy('floor_number')
             ->get()
             ->keyBy('floor_number');
@@ -161,30 +164,36 @@ class BlockController extends Controller
             $r = $rows->get($n);
 
             return [
-                'floor_number'     => $n,
-                'total_rooms'      => (int) ($r->total_rooms ?? 0),
-                'available_rooms'  => (int) ($r->available_rooms ?? 0),
-                'allocated_rooms'  => (int) ($r->allocated_rooms ?? 0),
-                'restricted_rooms' => (int) ($r->restricted_rooms ?? 0),
-                'utility_rooms'    => (int) ($r->utility_rooms ?? 0),
-                'small_rooms'      => (int) ($r->small_rooms ?? 0),
-                'large_rooms'      => (int) ($r->large_rooms ?? 0),
+                'floor_number'        => $n,
+                'total_rooms'         => (int) ($r->total_rooms ?? 0),
+                'available_rooms'     => (int) ($r->available_rooms ?? 0),
+                'allocated_rooms'     => (int) ($r->allocated_rooms ?? 0),
+                'restricted_rooms'    => (int) ($r->restricted_rooms ?? 0),
+                'utility_rooms'       => (int) ($r->utility_rooms ?? 0),
+                'small_rooms'         => (int) ($r->small_rooms ?? 0),
+                'large_rooms'         => (int) ($r->large_rooms ?? 0),
+                'total_bedspaces'     => (int) ($r->total_bedspaces ?? 0),
+                'allocated_bedspaces' => (int) ($r->allocated_bedspaces ?? 0),
+                'available_bedspaces' => (int) ($r->available_bedspaces ?? 0),
             ];
         });
 
         return response()->json([
-            'block_id'         => $block->block_id,
-            'block_number'     => $block->block_number,
-            'gender_type'      => $block->gender_type,
-            'total_floors'     => $block->total_floors,
-            'total_rooms'      => $floors->sum('total_rooms'),
-            'available_rooms'  => $floors->sum('available_rooms'),
-            'allocated_rooms'  => $floors->sum('allocated_rooms'),
-            'restricted_rooms' => $floors->sum('restricted_rooms'),
-            'utility_rooms'    => $floors->sum('utility_rooms'),
-            'small_rooms'      => $floors->sum('small_rooms'),
-            'large_rooms'      => $floors->sum('large_rooms'),
-            'floors'           => $floors,
+            'block_id'            => $block->block_id,
+            'block_number'        => $block->block_number,
+            'gender_type'         => $block->gender_type,
+            'total_floors'        => $block->total_floors,
+            'total_rooms'         => $floors->sum('total_rooms'),
+            'available_rooms'     => $floors->sum('available_rooms'),
+            'allocated_rooms'     => $floors->sum('allocated_rooms'),
+            'restricted_rooms'    => $floors->sum('restricted_rooms'),
+            'utility_rooms'       => $floors->sum('utility_rooms'),
+            'small_rooms'         => $floors->sum('small_rooms'),
+            'large_rooms'         => $floors->sum('large_rooms'),
+            'total_bedspaces'     => $floors->sum('total_bedspaces'),
+            'allocated_bedspaces' => $floors->sum('allocated_bedspaces'),
+            'available_bedspaces' => $floors->sum('available_bedspaces'),
+            'floors'              => $floors,
         ]);
     }
 
