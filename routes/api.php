@@ -21,5 +21,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/blocks/numbers', [BlockController::class, 'numbers']);
         Route::get('/blocks/{number}', [BlockController::class, 'show'])->whereNumber('number');
         Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
+        Route::get('/blocks/{block}/rooms/{room}', [RoomController::class, 'show'])->whereNumber(['block', 'room']);
     });
 });

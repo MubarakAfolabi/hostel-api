@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Block;
+use App\Models\Room;
 
 class RoomController extends Controller
 {
@@ -87,5 +89,72 @@ class RoomController extends Controller
                 'available_beds' => (int) $r->available_beds,
                 'room_status'    => $r->room_status,
             ]);
+    }
+
+    // One room with its bedspaces and the students in them
+    public function show(Request $request, $block, $room)
+    {
+        $blocks = Block::where('block_number', $block)
+            ->when($request->filled('hostel_id'), fn($q) => $q->where('hostel_id', $request->hostel_id))
+            ->get();
+
+        if ($blocks->isEmpty()) {
+            return response()->json(['message' => 'Block not found'], 404);
+        }
+
+        if ($blocks->count() > 1) {
+            return response()->json([
+                'message' => 'More than one block has this number. Add ?hostel_id=...',
+            ], 409);
+        }
+
+        $blockModel = $blocks->first();
+
+        $roomModel = Room::where('block_id', $blockModel->block_id)
+            ->where('room_number', $room)
+            ->first();
+
+        if (!$roomModel) {
+            return response()->json(['message' => 'Room not found'], 404);
+        }
+
+        $beds = DB::table('beds')
+            ->leftJoin('students', 'students.student_id', '=', 'beds.student_id')
+            ->where('beds.room_id', $roomModel->room_id)
+            ->orderBy('beds.bed_label')
+            ->get([
+                'beds.bed_id',
+                'beds.bed_label',
+                'beds.status',
+                'beds.student_id',
+                'students.first_name',
+                'students.last_name',
+                'students.department',
+                'students.level',
+            ]);
+
+        return response()->json([
+            'room_id'        => $roomModel->room_id,
+            'room_number'    => $roomModel->room_number,
+            'block_number'   => $blockModel->block_number,
+            'gender_type'    => $blockModel->gender_type,
+            'floor_number'   => $roomModel->floor_number,
+            'room_type'      => $roomModel->room_type,
+            'room_status'    => $roomModel->status,
+            'capacity'       => $roomModel->capacity,
+            'allocated_beds' => $beds->where('status', 'Allocated')->count(),
+            'available_beds' => $beds->where('status', 'Available')->count(),
+            'beds'           => $beds->map(fn($b) => [
+                'bed_id'    => $b->bed_id,
+                'bed_label' => $b->bed_label,
+                'status'    => $b->status,
+                'student'   => $b->student_id ? [
+                    'matric_number' => $b->student_id,
+                    'name'          => trim($b->first_name . ' ' . $b->last_name),
+                    'department'    => $b->department,
+                    'level'         => $b->level,
+                ] : null,
+            ])->values(),
+        ]);
     }
 }
