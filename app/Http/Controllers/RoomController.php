@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\Block;
 use App\Models\Room;
 
 class RoomController extends Controller
@@ -92,35 +91,17 @@ class RoomController extends Controller
     }
 
     // One room with its bedspaces and the students in them
-    public function show(Request $request, $block, $room)
+    public function show($roomId)
     {
-        $blocks = Block::where('block_number', $block)
-            ->when($request->filled('hostel_id'), fn($q) => $q->where('hostel_id', $request->hostel_id))
-            ->get();
+        $room = Room::with('block')->find($roomId);
 
-        if ($blocks->isEmpty()) {
-            return response()->json(['message' => 'Block not found'], 404);
-        }
-
-        if ($blocks->count() > 1) {
-            return response()->json([
-                'message' => 'More than one block has this number. Add ?hostel_id=...',
-            ], 409);
-        }
-
-        $blockModel = $blocks->first();
-
-        $roomModel = Room::where('block_id', $blockModel->block_id)
-            ->where('room_number', $room)
-            ->first();
-
-        if (!$roomModel) {
+        if (!$room) {
             return response()->json(['message' => 'Room not found'], 404);
         }
 
         $beds = DB::table('beds')
             ->leftJoin('students', 'students.student_id', '=', 'beds.student_id')
-            ->where('beds.room_id', $roomModel->room_id)
+            ->where('beds.room_id', $room->room_id)
             ->orderBy('beds.bed_label')
             ->get([
                 'beds.bed_id',
@@ -134,14 +115,14 @@ class RoomController extends Controller
             ]);
 
         return response()->json([
-            'room_id'        => $roomModel->room_id,
-            'room_number'    => $roomModel->room_number,
-            'block_number'   => $blockModel->block_number,
-            'gender_type'    => $blockModel->gender_type,
-            'floor_number'   => $roomModel->floor_number,
-            'room_type'      => $roomModel->room_type,
-            'room_status'    => $roomModel->status,
-            'capacity'       => $roomModel->capacity,
+            'room_id'        => $room->room_id,
+            'room_number'    => $room->room_number,
+            'block_number'   => $room->block->block_number,
+            'gender_type'    => $room->block->gender_type,
+            'floor_number'   => $room->floor_number,
+            'room_type'      => $room->room_type,
+            'room_status'    => $room->status,
+            'capacity'       => $room->capacity,
             'allocated_beds' => $beds->where('status', 'Allocated')->count(),
             'available_beds' => $beds->where('status', 'Available')->count(),
             'beds'           => $beds->map(fn($b) => [
