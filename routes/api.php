@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\BlockController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\StudentController;
+use App\Http\Controllers\BedController;
 use App\Models\HostelDetail;
 use Illuminate\Support\Facades\Route;
 
@@ -24,5 +25,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/blocks/{number}/floors', [BlockController::class, 'floors'])->whereNumber('number');
         Route::get('/rooms/{roomId}', [RoomController::class, 'show'])->where('roomId', 'R[0-9]+');
         Route::get('/students/search', [StudentController::class, 'search'])->middleware('throttle:120,1');
+        Route::post('/beds/{bedId}/assign', [BedController::class, 'assign'])
+            ->where('bedId', 'R[0-9]+-[0-9]+')
+            ->middleware('throttle:30,1');
     });
 });
