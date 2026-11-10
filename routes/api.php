@@ -28,5 +28,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/beds/{bedId}/assign', [BedController::class, 'assign'])
             ->where('bedId', 'R[0-9]+-[0-9]+')
             ->middleware('throttle:30,1');
+        Route::patch('/rooms/{roomId}/restriction', [RoomController::class, 'setRestricted'])
+            ->where('roomId', 'R[0-9]+')
+            ->middleware('throttle:30,1');
     });
 });

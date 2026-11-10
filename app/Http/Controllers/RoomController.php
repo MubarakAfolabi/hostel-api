@@ -138,4 +138,54 @@ class RoomController extends Controller
             ])->values(),
         ]);
     }
+
+
+    // Marks a bedroom as unavailable (Restricted) or puts it back in use
+    public function setRestricted(Request $request, string $roomId)
+    {
+        $data = $request->validate([
+            'restricted' => 'required|boolean',
+        ]);
+
+        return DB::transaction(function () use ($roomId, $data) {
+            $room = Room::whereKey($roomId)->lockForUpdate()->first();
+
+            if (!$room) {
+                return response()->json(['message' => 'Room not found.'], 404);
+            }
+
+            if ($room->room_type === 'Other') {
+                return response()->json([
+                    'message' => 'Only bedrooms can be marked unavailable.',
+                ], 422);
+            }
+
+            $beds = DB::table('beds')->where('room_id', $room->room_id);
+
+            if ($data['restricted']) {
+                $allocated = (clone $beds)->where('status', 'Allocated')->count();
+
+                if ($allocated > 0) {
+                    return response()->json([
+                        'message' => "{$allocated} student(s) are in this room. Move them out first.",
+                    ], 422);
+                }
+
+                $room->update(['status' => 'Restricted']);
+            } else {
+                // Back in use: Available if any bed is free, otherwise Allocated
+                $hasAvailable = (clone $beds)->where('status', 'Available')->exists();
+                $hasAny = (clone $beds)->exists();
+
+                $room->update([
+                    'status' => ($hasAvailable || !$hasAny) ? 'Available' : 'Allocated',
+                ]);
+            }
+
+            return response()->json([
+                'room_id' => $room->room_id,
+                'status'  => $room->status,
+            ]);
+        });
+    }
 }
